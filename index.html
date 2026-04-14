@@ -78,6 +78,7 @@
         <div class="header">
             <span>CORE ENGINE v3.0</span>
             <label class="upload-btn">加载本地影像<input type="file" id="upload" accept="image/*"></label>
+            <button id="download-btn" class="upload-btn" style="margin-left: 10px; background: #00ffcc; color: #000; border: none;">💾 保存高清图</button>
         </div>
         
         <div class="panels" id="ui-container">
@@ -339,6 +340,45 @@
         dCtx.fillText('CYBER', 300, 450); dCtx.fillText('ENGINE', 280, 600);
         
         initImage(defaultCanvas.toDataURL());
+        // ==========================================
+        // 4. 高清原图无损导出逻辑
+        // ==========================================
+        document.getElementById('download-btn').addEventListener('click', () => {
+            if (!sourceImage.src) return;
+
+            // 关键点 1：强制触发一次同步重绘。
+            // 因为 WebGL 默认会在每一帧渲染完毕后清空绘制缓冲区 (Drawing Buffer) 以节省内存。
+            // 如果不先 render() 一次，你截取出来的可能是一张全黑的图。
+            render();
+
+            // 关键点 2：使用 toBlob 异步导出大图，防止 toDataURL 产生的超长 Base64 字符串卡死手机浏览器。
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    alert('导出失败，请重试');
+                    return;
+                }
+                
+                // 创建一个虚拟的下载链接
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                
+                // 生成带时间戳的文件名，默认保存为 PNG 无损格式
+                const timestamp = new Date().getTime();
+                a.download = `Cyber_Patina_${timestamp}.png`; 
+                
+                document.body.appendChild(a);
+                a.click(); // 触发静默下载
+
+                // 释放内存
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+                
+            }, 'image/png'); // 你也可以改为 'image/jpeg', 0.95 来输出体积更小的 JPG
+        });
 
     </script>
 </body>
