@@ -77,8 +77,12 @@
     <div class="controls">
         <div class="header">
             <span>CORE ENGINE v3.0</span>
-            <label class="upload-btn">加载本地影像<input type="file" id="upload" accept="image/*"></label>
-            <button id="download-btn" class="upload-btn" style="margin-left: 10px; background: #00ffcc; color: #000; border: none;">💾 保存高清图</button>
+            <div>
+                <button id="cam-btn" class="upload-btn" style="background: #8a2be2; border: none; margin-right: 5px;">📷 实时相机</button>
+                <label class="upload-btn">加载影像<input type="file" id="upload" accept="image/*"></label>
+                <button id="share-btn" class="upload-btn" style="background: #333; color: #fff; border: 1px solid #555; margin-left: 5px;">🔗 复制预设</button>
+                <button id="download-btn" class="upload-btn" style="margin-left: 5px; background: #00ffcc; color: #000; border: none;">💾 保存</button>
+            </div>
         </div>
         
         <div class="panels" id="ui-container">
@@ -107,7 +111,9 @@
             pixelate:   { val: 1, min: 1, max: 64, step: 1, group: '数字退化 (Cyber Patina Lab)' },
             aberration: { val: 0, min: 0, max: 0.05, step: 0.001, group: '数字退化 (Cyber Patina Lab)' },
             posterize:  { val: 256, min: 2, max: 256, step: 1, group: '数字退化 (Cyber Patina Lab)' },
-            vignette:   { val: 0, min: 0, max: 1.5, step: 0.05, group: '数字退化 (Cyber Patina Lab)' }
+            vignette:   { val: 0, min: 0, max: 1.5, step: 0.05, group: '数字退化 (Cyber Patina Lab)' },
+            scanline:   { val: 0, min: 0, max: 1, step: 0.05, group: '动态故障 (Dynamic Glitch)' },
+            glitch:     { val: 0, min: 0, max: 1, step: 0.05, group: '动态故障 (Dynamic Glitch)' }
         };
 
         // ==========================================
@@ -160,91 +166,78 @@
             varying vec2 v_uv;
             uniform sampler2D u_image;
             uniform vec2 u_resolution;
+            uniform float u_time; // ✨ 新增：时间维度
 
-            // 映射 Uniforms
+            // 映射 Uniforms (包含新增的 glitch 和 scanline)
             uniform float u_exposure; uniform float u_contrast; uniform float u_clarity;
             uniform float u_temperature; uniform float u_tint; uniform float u_saturation; uniform float u_hue;
             uniform float u_shadows; uniform float u_midtones; uniform float u_highlights;
             uniform float u_pixelate; uniform float u_aberration; uniform float u_posterize; uniform float u_vignette;
+            uniform float u_scanline; uniform float u_glitch;
 
-            // RGB 转换为 HSV 函数
-            vec3 rgb2hsv(vec3 c) {
-                vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-                vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-                vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
-                float d = q.x - min(q.w, q.y);
-                float e = 1.0e-10;
-                return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
-            }
+            // RGB <-> HSV 函数 (保持不变)
+            vec3 rgb2hsv(vec3 c) { vec4 K=vec4(0.0,-1.0/3.0,2.0/3.0,-1.0); vec4 p=mix(vec4(c.bg,K.wz),vec4(c.gb,K.xy),step(c.b,c.g)); vec4 q=mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r)); float d=q.x-min(q.w,q.y); float e=1.0e-10; return vec3(abs(q.z+(q.w-q.y)/(6.0*d+e)),d/(q.x+e),q.x); }
+            vec3 hsv2rgb(vec3 c) { vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0); vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.www); return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y); }
 
-            // HSV 转换为 RGB 函数
-            vec3 hsv2rgb(vec3 c) {
-                vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-                vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-                return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-            }
+            // 简单的伪随机噪声发生器
+            float rand(vec2 co){ return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453); }
 
             void main() {
-                // 1. 空间退化：电子包浆 (像素化)
                 vec2 uv = v_uv;
+                
+                // 1. 空间退化：电子包浆
                 if (u_pixelate > 1.0) {
                     float dx = u_pixelate / u_resolution.x;
                     float dy = u_pixelate / u_resolution.y;
                     uv = vec2(dx * floor(uv.x / dx), dy * floor(uv.y / dy));
                 }
 
-                // 2. 通道剥离：色散 (Aberration)
+                // ✨ 2. 动态通道剥离：色散 + Glitch 抖动
                 vec4 color = texture2D(u_image, uv);
-                if (u_aberration > 0.0) {
-                    color.r = texture2D(u_image, uv + vec2(u_aberration, 0.0)).r;
-                    color.b = texture2D(u_image, uv - vec2(u_aberration, 0.0)).b;
-                }
-                // ==========================================
-                // NEW: 细节与结构 (Clarity / Sharpening)
-                // ==========================================
-                if (u_clarity > 0.0) {
-                    // 获取单个像素的步长
-                    vec2 step = 1.0 / u_resolution;
+                if (u_aberration > 0.0 || u_glitch > 0.0) {
+                    // 利用时间产生随机的横向撕裂偏移
+                    float noise = rand(vec2(uv.y, u_time)) * 2.0 - 1.0; 
+                    // 当 glitch 参数增大时，高频噪声撕裂感增强
+                    float offset = u_aberration + (u_glitch * noise * 0.08); 
                     
-                    // 采样上下左右四个邻居像素
+                    color.r = texture2D(u_image, uv + vec2(offset, 0.0)).r;
+                    color.b = texture2D(u_image, uv - vec2(offset, 0.0)).b;
+                }
+
+                // (保留你原有的 Clarity 逻辑)
+                if (u_clarity > 0.0) {
+                    vec2 step = 1.0 / u_resolution;
                     vec3 col_up = texture2D(u_image, uv + vec2(0.0, step.y)).rgb;
                     vec3 col_dn = texture2D(u_image, uv + vec2(0.0, -step.y)).rgb;
                     vec3 col_lf = texture2D(u_image, uv + vec2(-step.x, 0.0)).rgb;
                     vec3 col_rt = texture2D(u_image, uv + vec2(step.x, 0.0)).rgb;
-                    
-                    // 提取高频细节 (当前像素 * 4 - 四周像素之和)
                     vec3 highFreq = color.rgb * 4.0 - (col_up + col_dn + col_lf + col_rt);
-                    
-                    // 将高频边缘以 u_clarity 为权重重新叠加回原图，实现局部微反差增强
                     color.rgb += highFreq * u_clarity * 2.5; 
                 }
                 
-                // 3. 基础光影映射
                 color.rgb *= pow(2.0, u_exposure);
                 color.rgb = (color.rgb - 0.5) * u_contrast + 0.5;
+                color.r += u_temperature * 0.2; color.b -= u_temperature * 0.2; 
+                color.g += u_tint * 0.2; 
 
-                // 4. 色温与色调 (物理级校准映射)
-                color.r += u_temperature * 0.2; color.b -= u_temperature * 0.2; // Temp
-                color.g += u_tint * 0.2; // Tint
-
-                // 5. HSV 色彩空间变换 (饱和度与色相)
                 vec3 hsv = rgb2hsv(color.rgb);
-                hsv.y *= u_saturation; // 饱和度
-                hsv.x = mod(hsv.x + u_hue / 6.28318, 1.0); // 色相环旋转
+                hsv.y *= u_saturation; 
+                hsv.x = mod(hsv.x + u_hue / 6.28318, 1.0); 
                 color.rgb = hsv2rgb(hsv);
 
-                // 6. RGB 曲线等效映射 (Lift, Gamma, Gain)
-                // Shadows(Lift), Midtones(Gamma), Highlights(Gain)
-                color.rgb = color.rgb * u_highlights; // 增益
-                color.rgb = pow(clamp(color.rgb, 0.0, 1.0), vec3(1.0 / u_midtones)); // 伽马
-                color.rgb = color.rgb + u_shadows * (1.0 - color.rgb); // 提升暗部
+                color.rgb = color.rgb * u_highlights; 
+                color.rgb = pow(clamp(color.rgb, 0.0, 1.0), vec3(1.0 / u_midtones)); 
+                color.rgb = color.rgb + u_shadows * (1.0 - color.rgb); 
 
-                // 7. 色彩退化：海报化 / 色阶断层
-                if (u_posterize < 256.0) {
-                    color.rgb = floor(color.rgb * u_posterize) / u_posterize;
+                if (u_posterize < 256.0) { color.rgb = floor(color.rgb * u_posterize) / u_posterize; }
+
+                // ✨ 3. CRT 扫描线 (Scanlines)
+                if (u_scanline > 0.0) {
+                    // 利用 uv.y 和 u_time 制造向下滚动的扫描线
+                    float scan = sin(uv.y * 800.0 - u_time * 10.0) * 0.04 * u_scanline;
+                    color.rgb -= scan;
                 }
 
-                // 8. 暗角特效 (Vignette)
                 float dist = distance(v_uv, vec2(0.5, 0.5));
                 color.rgb *= smoothstep(0.8, 0.8 - u_vignette, dist);
 
@@ -295,16 +288,117 @@
         });
 
         // 核心渲染循环 (将 CPU 状态向量传入 GPU 着色器)
+        // ==========================================
+        // 核心渲染循环系统
+        // ==========================================
+        let startTime = Date.now();
+        let videoElement = null; // 用于存放摄像头流
+
+        // 修改 render 函数
         function render() {
             gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
             gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), gl.canvas.width, gl.canvas.height);
             
+            // ✨ 注入时间参数
+            let currentTime = (Date.now() - startTime) / 1000.0;
+            gl.uniform1f(gl.getUniformLocation(program, 'u_time'), currentTime);
+            
+            // ✨ 视频流实时纹理更新
+            if (videoElement && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoElement);
+            }
+
             Object.keys(state).forEach(key => {
                 gl.uniform1f(gl.getUniformLocation(program, `u_${key}`), state[key].val);
             });
 
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            
+            // 永不停息的循环，用于驱动动画
+            requestAnimationFrame(render);
         }
+
+        // 修改 slider 监听，去除原有的 requestAnimationFrame(render)
+        Object.keys(state).forEach(key => {
+            const slider = document.getElementById(key);
+            const valDisplay = document.getElementById(`val-${key}`);
+            slider.addEventListener('input', (e) => {
+                state[key].val = parseFloat(e.target.value);
+                valDisplay.innerText = state[key].val;
+            });
+        });
+
+        // 启动渲染循环
+        render();
+
+        // ==========================================
+        // 实时摄像头接入逻辑
+        // ==========================================
+        document.getElementById('cam-btn').addEventListener('click', async () => {
+            if (!videoElement) {
+                videoElement = document.createElement('video');
+                videoElement.autoplay = true;
+                videoElement.muted = true;
+                videoElement.playsInline = true;
+            }
+            try {
+                // 请求后置摄像头
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 1280, height: 720 } });
+                videoElement.srcObject = stream;
+                videoElement.onloadedmetadata = () => {
+                    videoElement.play();
+                    // 调整 canvas 尺寸匹配视频流
+                    canvas.width = videoElement.videoWidth;
+                    canvas.height = videoElement.videoHeight;
+                };
+            } catch (err) {
+                alert('无法访问摄像头，请检查浏览器权限！');
+            }
+        });
+
+        // ==========================================
+        // 预设分享与 URL 读取逻辑 (MVP 闭环)
+        // ==========================================
+        // 1. 生成分享链接
+        document.getElementById('share-btn').addEventListener('click', () => {
+            const preset = {};
+            Object.keys(state).forEach(k => preset[k] = state[k].val);
+            // 极简的 Base64 序列化
+            const encoded = btoa(JSON.stringify(preset));
+            const shareUrl = window.location.origin + window.location.pathname + '?p=' + encoded;
+            
+            // 写入剪贴板
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                const btn = document.getElementById('share-btn');
+                btn.innerText = '✅ 已复制';
+                setTimeout(() => btn.innerText = '🔗 复制预设', 2000);
+            });
+        });
+
+        // 2. 页面加载时解析 URL 参数
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const p = urlParams.get('p');
+            if (p) {
+                try {
+                    const preset = JSON.parse(atob(p));
+                    Object.keys(preset).forEach(k => {
+                        if(state[k]) {
+                            state[k].val = preset[k];
+                            // 同步更新 UI
+                            const slider = document.getElementById(k);
+                            if(slider) {
+                                slider.value = preset[k];
+                                document.getElementById(`val-${k}`).innerText = preset[k];
+                            }
+                        }
+                    });
+                } catch(e) {
+                    console.error('预设解析失败');
+                }
+            }
+        });
 
         // 加载并初始化测试图案
         function initImage(src) {
