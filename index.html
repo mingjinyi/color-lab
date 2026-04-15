@@ -10,8 +10,33 @@
         .viewport { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; padding: 20px; }
         canvas { max-width: 100%; max-height: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.8); border: 1px solid #222; }
         
-        .controls { width: 380px; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
-        .header { padding: 20px; font-weight: 800; letter-spacing: 2px; border-bottom: 1px solid var(--border); color: #fff; display: flex; justify-content: space-between; align-items: center;}
+        .controls { 
+            width: 460px; /* ✨ 将原来的 380px 拓宽到 460px 左右 */
+            background: var(--panel); 
+            border-left: 1px solid var(--border); 
+            display: flex; 
+            flex-direction: column; 
+        }
+
+        .header { 
+            padding: 15px 20px; /* 稍微调整上下边距让整体更协调 */
+            font-weight: 800; 
+            letter-spacing: 2px; 
+            border-bottom: 1px solid var(--border); 
+            color: #fff; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            flex-wrap: wrap; /* ✨ 核心防御：允许内部元素自动换行，绝不出框 */
+            gap: 12px; /* 换行时的间距 */
+        }
+        
+        /* ✨ 新增：让装按钮的容器也用 flex 布局，方便统一管理间距 */
+        .header > div {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
         
         .upload-btn { background: var(--accent); color: #fff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
         input[type="file"] { display: none; }
@@ -79,6 +104,7 @@
             <span>CORE ENGINE v3.0</span>
             <div>
                 <button id="cam-btn" class="upload-btn" style="background: #8a2be2; border: none; margin-right: 5px;">📷 实时相机</button>
+                <button id="flip-cam-btn" class="upload-btn" style="background: #ffaa00; border: none; margin-right: 5px; display: none;">🔄 切换镜头</button>
                 <label class="upload-btn">加载影像<input type="file" id="upload" accept="image/*"></label>
                 <button id="share-btn" class="upload-btn" style="background: #333; color: #fff; border: 1px solid #555; margin-left: 5px;">🔗 复制预设</button>
                 <button id="download-btn" class="upload-btn" style="margin-left: 5px; background: #00ffcc; color: #000; border: none;">💾 保存</button>
@@ -114,6 +140,7 @@
             vignette:   { val: 0, min: 0, max: 1.5, step: 0.05, group: '数字退化 (Cyber Patina Lab)' },
             scanline:   { val: 0, min: 0, max: 1, step: 0.05, group: '动态故障 (Dynamic Glitch)' },
             glitch:     { val: 0, min: 0, max: 1, step: 0.05, group: '动态故障 (Dynamic Glitch)' }
+            
         };
 
         // ==========================================
@@ -293,7 +320,9 @@
         // ==========================================
         let startTime = Date.now();
         let videoElement = null; // 用于存放摄像头流
-
+        // 在 let startTime = Date.now(); 和 let videoElement = null; 附近添加：
+        let isUsingCamera = false;
+        let currentFacingMode = 'environment'; // 默认使用后置摄像头
         // 修改 render 函数
         function render() {
             gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
@@ -304,7 +333,7 @@
             gl.uniform1f(gl.getUniformLocation(program, 'u_time'), currentTime);
             
             // ✨ 视频流实时纹理更新
-            if (videoElement && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
+           if (isUsingCamera && videoElement && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
                 gl.bindTexture(gl.TEXTURE_2D, texture);
                 gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoElement);
             }
@@ -333,18 +362,29 @@
         render();
 
         // ==========================================
-        // 实时摄像头接入逻辑
+        // 实时摄像头接入逻辑 (支持前后摄切换)
         // ==========================================
-        document.getElementById('cam-btn').addEventListener('click', async () => {
+        async function startCamera(facingMode) {
             if (!videoElement) {
                 videoElement = document.createElement('video');
                 videoElement.autoplay = true;
                 videoElement.muted = true;
                 videoElement.playsInline = true;
             }
+
+            // 核心：如果当前摄像头正在运行，必须先释放硬件轨道，否则切换会失败或报错
+            if (videoElement.srcObject) {
+                videoElement.srcObject.getTracks().forEach(track => track.stop());
+            }
+
             try {
-                // 请求后置摄像头
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 1280, height: 720 } });
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: facingMode, 
+                        width: { ideal: 1280 }, 
+                        height: { ideal: 720 } 
+                    } 
+                });
                 videoElement.srcObject = stream;
                 videoElement.onloadedmetadata = () => {
                     videoElement.play();
@@ -352,11 +392,22 @@
                     canvas.width = videoElement.videoWidth;
                     canvas.height = videoElement.videoHeight;
                 };
+                
+                isUsingCamera = true;
+                document.getElementById('flip-cam-btn').style.display = 'inline-block'; // 显示切换按钮
             } catch (err) {
                 alert('无法访问摄像头，请检查浏览器权限！');
             }
+        }
+        document.getElementById('cam-btn').addEventListener('click', () => {
+            startCamera(currentFacingMode);
         });
 
+        document.getElementById('flip-cam-btn').addEventListener('click', () => {
+            // 翻转状态并重启相机
+            currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+            startCamera(currentFacingMode);
+        });
         // ==========================================
         // 预设分享与 URL 读取逻辑 (MVP 闭环)
         // ==========================================
@@ -416,8 +467,19 @@
             sourceImage.src = src;
         }
 
-        // 本地上传图片逻辑
+        // ==========================================
+        // 本地上传图片逻辑 (修复冲突)
+        // ==========================================
         document.getElementById('upload').addEventListener('change', (e) => {
+            // ✨ 核心修复：上传本地图时，关闭相机状态并释放硬件轨道
+            isUsingCamera = false;
+            document.getElementById('flip-cam-btn').style.display = 'none'; // 隐藏切换按钮
+            
+            if (videoElement && videoElement.srcObject) {
+                videoElement.srcObject.getTracks().forEach(track => track.stop());
+                videoElement.srcObject = null;
+            }
+
             const reader = new FileReader();
             reader.onload = (event) => initImage(event.target.result);
             if (e.target.files[0]) reader.readAsDataURL(e.target.files[0]);
