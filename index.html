@@ -2,46 +2,33 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Cyber Patina | 终极 GPU 渲染引擎 (WebGL)</title>
+    <title>Cyber Patina | 终极 GPU 渲染引擎 (WebGL) v5.5</title>
     <style>
-        :root { --bg: #0f0f13; --panel: #18181d; --text: #d2d2d7; --accent: #ff0055; --border: #333; }
+        :root { --bg: #0f0f13; --panel: #18181d; --text: #d2d2d7; --accent: #ff0055; --border: #333; --tab-bg: #222; }
         body { margin: 0; display: flex; height: 100vh; background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; overflow: hidden; }
         
-        .viewport { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; padding: 20px; }
-        canvas { max-width: 100%; max-height: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.8); border: 1px solid #222; }
+        .viewport { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; padding: 20px; perspective: 1000px; overflow: hidden;}
+        canvas { max-width: 100%; max-height: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.8); border: 1px solid #222; touch-action: none; transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
         
-        .controls { 
-            width: 460px; /* ✨ 将原来的 380px 拓宽到 460px 左右 */
-            background: var(--panel); 
-            border-left: 1px solid var(--border); 
-            display: flex; 
-            flex-direction: column; 
-        }
-
-        .header { 
-            padding: 15px 20px; /* 稍微调整上下边距让整体更协调 */
-            font-weight: 800; 
-            letter-spacing: 2px; 
-            border-bottom: 1px solid var(--border); 
-            color: #fff; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center;
-            flex-wrap: wrap; /* ✨ 核心防御：允许内部元素自动换行，绝不出框 */
-            gap: 12px; /* 换行时的间距 */
-        }
+        .controls { width: 460px; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; z-index: 10; }
+        .header { padding: 15px 20px; font-weight: 800; letter-spacing: 2px; border-bottom: 1px solid var(--border); color: #fff; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .header-actions { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; justify-content: flex-end;}
         
-        /* ✨ 新增：让装按钮的容器也用 flex 布局，方便统一管理间距 */
-        .header > div {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-        
-        .upload-btn { background: var(--accent); color: #fff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
+        .upload-btn { background: var(--accent); color: #fff; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; border: none; }
+        .upload-btn:hover { opacity: 0.8; }
         input[type="file"] { display: none; }
 
-        .panels { overflow-y: auto; flex: 1; padding-bottom: 50px; }
+        .tabs-nav { display: flex; background: var(--tab-bg); border-bottom: 1px solid var(--border); overflow-x: auto; white-space: nowrap; scrollbar-width: none; -ms-overflow-style: none; scroll-behavior: smooth; }
+        .tabs-nav::-webkit-scrollbar { display: none; }
+        .tab-btn { flex: 0 0 auto; padding: 12px 15px; background: transparent; border: none; color: #888; font-size: 13px; font-weight: bold; cursor: pointer; transition: all 0.2s; border-bottom: 2px solid transparent; }
+        .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+        .tab-btn.active { color: var(--accent); border-bottom: 2px solid var(--accent); background: var(--panel); }
+
+        .panels { overflow-y: auto; flex: 1; padding-bottom: 50px; position: relative; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
         details { border-bottom: 1px solid var(--border); }
         summary { padding: 16px 20px; cursor: pointer; font-weight: bold; list-style: none; font-size: 14px; user-select: none; }
         summary::-webkit-details-marker { display: none; }
@@ -56,463 +43,607 @@
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: #333; border-radius: 2px; }
         input[type=range]::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; margin-top: -4px; transition: transform 0.1s; }
         input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.5); }
-        /* ==========================================
-   移动端响应式适配 (Mobile Responsive)
-   ========================================== */
+
+        .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        .preset-btn { background: #222; border: 1px solid #444; color: #eee; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; text-align: center; font-size: 13px;}
+        .preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+        
+        .xy-pad-container { margin-top: 20px; text-align: center; }
+        .xy-pad { width: 100%; height: 200px; background: linear-gradient(45deg, #111, #2a0845); border: 1px solid #555; border-radius: 8px; position: relative; cursor: crosshair; touch-action: none; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);}
+        .xy-cursor { width: 20px; height: 20px; background: rgba(255,0,85,0.8); border: 2px solid #fff; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 10px var(--accent);}
+        .xy-label { font-size: 11px; color: #777; margin-top: 8px; display: flex; justify-content: space-between; }
+
+        .ai-placeholder { padding: 30px 20px; text-align: center; color: #666; }
+        .ai-btn { background: transparent; border: 1px dashed #555; color: #888; padding: 15px; width: 100%; border-radius: 6px; margin-bottom: 15px; cursor: pointer; transition: all 0.2s; font-weight: bold;}
+        .ai-btn:hover { border-color: #00ffcc; color: #00ffcc; background: rgba(0, 255, 204, 0.05); }
+
+        .status-active { border-color: #00ffcc !important; color: #00ffcc !important; background: rgba(0, 255, 204, 0.1) !important; }
+        .status-active-audio { border-color: #ff00ff !important; color: #ff00ff !important; background: rgba(255, 0, 255, 0.1) !important; }
+
         @media (max-width: 768px) {
-            body {
-                flex-direction: column; /* 改为上下排列 */
-                overflow-y: auto;       /* 允许页面整体滚动 */
-            }
-            
-            .viewport {
-                width: 100%;
-                height: 50vh; /* 手机上视口占上半屏 */
-                padding: 10px;
-                box-sizing: border-box;
-            }
-            
-            .controls {
-                width: 100%; /* 控制台占满全宽 */
-                height: auto;
-                border-left: none;
-                border-top: 1px solid var(--border);
-                flex: none; /* 取消弹性拉伸 */
-            }
-            
-            .panels {
-                padding-bottom: 30px;
-            }
-            
-            .header {
-                position: sticky; /* 让顶部标题栏在滑动时吸顶 */
-                top: 0;
-                z-index: 100;
-                background: var(--panel);
-            }
+            body { flex-direction: column; overflow-y: auto; }
+            .viewport { width: 100%; height: 50vh; padding: 10px; box-sizing: border-box; }
+            .controls { width: 100%; height: auto; border-left: none; border-top: 1px solid var(--border); flex: none; }
+            .panels { padding-bottom: 30px; }
+            .header, .tabs-nav { position: sticky; top: 0; z-index: 100; background: var(--panel); }
+            .tabs-nav { top: auto; }
         }
     </style>
 </head>
 <body>
-
-    <div class="viewport">
-        <canvas id="glcanvas"></canvas>
-    </div>
-
+    <div class="viewport" id="viewport"><canvas id="glcanvas"></canvas></div>
     <div class="controls">
         <div class="header">
-            <span>CORE ENGINE v3.0</span>
-            <div>
-                <button id="cam-btn" class="upload-btn" style="background: #8a2be2; border: none; margin-right: 5px;">📷 实时相机</button>
-                <button id="flip-cam-btn" class="upload-btn" style="background: #ffaa00; border: none; margin-right: 5px; display: none;">🔄 切换镜头</button>
-                <label class="upload-btn">加载影像<input type="file" id="upload" accept="image/*"></label>
-                <button id="share-btn" class="upload-btn" style="background: #333; color: #fff; border: 1px solid #555; margin-left: 5px;">🔗 复制预设</button>
-                <button id="download-btn" class="upload-btn" style="margin-left: 5px; background: #00ffcc; color: #000; border: none;">💾 保存</button>
+            <span>CORE ENGINE v5.5 (HDR+LUT)</span>
+            <div class="header-actions">
+                <button id="cam-btn" class="upload-btn" style="background: #8a2be2;">📷 实时</button>
+                <button id="flip-cam-btn" class="upload-btn" style="background: #ffaa00; display: none;">🔄 切换</button>
+                <label class="upload-btn">加载图<input type="file" id="upload" accept="image/*"></label>
+                <label class="upload-btn" style="background: #e91e63;">
+                    <input type="file" id="upload-lut" accept=".cube">🎬 挂载 LUT
+                </label>
+                <button id="clear-lut-btn" class="upload-btn" style="background: #333; display: none;">❌ 卸载 LUT</button>
+                
+                <button id="rand-btn" class="upload-btn" style="background: #e67e22;">🎲 灵感</button>
+                <button id="reset-btn" class="upload-btn" style="background: #555;">🔄 重置</button>
+                <button id="record-btn" class="upload-btn" style="background: #e74c3c;">🎥 录制</button>
+                <button id="download-btn" class="upload-btn" style="background: #00ffcc; color: #000;">💾 保存</button>
             </div>
         </div>
-        
+        <div class="tabs-nav">
+            <button class="tab-btn active" data-target="tab0">互动与预设</button>
+            <button class="tab-btn" data-target="tab1">基础调色</button>
+            <button class="tab-btn" data-target="tab2">频域处理</button>
+            <button class="tab-btn" data-target="tab3">赛博实验室</button>
+            <button class="tab-btn" data-target="tab5" style="color: #00ffcc;">⚡ 动态感应引擎</button> 
+            <button class="tab-btn" data-target="tab4">AI / 蒙版</button>
+        </div>
         <div class="panels" id="ui-container">
+            <div id="tab0" class="tab-content active">
+                <details open><summary>💊 情绪胶囊 (预设)</summary>
+                    <div class="group"><div class="preset-grid">
+                        <button class="preset-btn" onclick="applyPreset('nightCity')">🌃 赛博夜城</button>
+                        <button class="preset-btn" onclick="applyPreset('lucidDream')">🌌 清醒梦境</button>
+                        <button class="preset-btn" onclick="applyPreset('systemError')">⚠️ 极度故障</button>
+                        <button class="preset-btn" onclick="applyPreset('xRay')">🩻 脉冲 X 光</button>
+                    </div></div>
+                </details>
+                <details open><summary>🎛️ X-Y 情绪控制板</summary>
+                    <div class="group"><div class="xy-pad-container">
+                        <div class="xy-pad" id="xy-pad"><div class="xy-cursor" id="xy-cursor"></div></div>
+                        <div class="xy-label"><span>← 色彩空间 →</span><span>↓ 干扰强度 ↑</span></div>
+                    </div></div>
+                </details>
             </div>
+
+            <div id="tab1" class="tab-content"></div><div id="tab2" class="tab-content"></div><div id="tab3" class="tab-content"></div>
+            
+            <div id="tab5" class="tab-content">
+                <details open>
+                    <summary>🌪️ 动能撕裂 (Kinetic Tearing)</summary>
+                    <div class="group">
+                        <p style="font-size: 12px; color: #888; margin-top: 0;">PC端左键拖拽 / 移动端快速滑动，触发物理级数字崩坏。</p>
+                        <button id="kinetic-toggle" class="ai-btn status-active">🟢 动能引擎：已激活</button>
+                        <div class="row"><div class="label-row"><span>触发灵敏度</span><span id="val-kinetic-sens">2.0</span></div><input type="range" id="kinetic-sens" min="0.5" max="5.0" step="0.1" value="2.0"></div>
+                        <div class="row"><div class="label-row"><span>惯性阻尼</span><span id="val-kinetic-decay">0.92</span></div><input type="range" id="kinetic-decay" min="0.80" max="0.99" step="0.01" value="0.92"></div>
+                    </div>
+                </details>
+                <details open>
+                    <summary>📱 空间重力场 (Gravity Lens)</summary>
+                    <div class="group">
+                        <p style="font-size: 12px; color: #888; margin-top: 0;">移动端晃动设备 / PC端鼠标跟随，产生强烈的空间 3D 透镜与物理色散。</p>
+                        <button id="gravity-toggle" class="ai-btn">⭕ 重力透镜：未激活</button>
+                        <div class="row"><div class="label-row"><span>扭曲强度</span><span id="val-gravity-str">1.5</span></div><input type="range" id="gravity-str" min="0.1" max="5.0" step="0.1" value="1.5"></div>
+                    </div>
+                </details>
+                <details open>
+                    <summary>🎵 频段共振 (Audio React)</summary>
+                    <div class="group">
+                        <p style="font-size: 12px; color: #888; margin-top: 0;">授权麦克风，让低频轰炸曝光，高频撕裂扫描线，VJ级音画同步。</p>
+                        <button id="audio-toggle" class="ai-btn" style="border-color: #ff00ff; color: #ff00ff;">🎙️ 激活麦克风阵列</button>
+                        <div class="row"><div class="label-row"><span>音频灵敏度</span><span id="val-audio-gain">1.5</span></div><input type="range" id="audio-gain" min="0.5" max="5.0" step="0.1" value="1.5"></div>
+                    </div>
+                </details>
+            </div>
+
+            <div id="tab4" class="tab-content"><div class="ai-placeholder">
+                <h3 style="color: #aaa; margin-top: 0;">ONNX Runtime 尚未挂载</h3>
+                <p style="font-size: 12px; margin-bottom: 30px;">预留区域。计划引入端侧轻量级模型，支持前景提取与局部蒙版渲染。</p>
+                <button class="ai-btn">🔌 挂载模型 (WASM)</button>
+            </div></div>
+        </div>
     </div>
 
     <script>
-        // ==========================================
-        // 1. 参数状态树 (定义所有底层控制向量)
-        // ==========================================
         const state = {
-            // 光影与结构
-            exposure: { val: 0, min: -3, max: 3, step: 0.1, group: '光影与结构 (Light & Structure)' },
-            contrast: { val: 1.0, min: 0.1, max: 3.0, step: 0.05, group: '光影与结构 (Light & Structure)' },
-            clarity:  { val: 0, min: 0, max: 1, step: 0.05, group: '光影与结构 (Light & Structure)' }, // 模拟结构锐化
-            // 核心色彩科学
-            temperature: { val: 0, min: -1, max: 1, step: 0.05, group: '色彩科学 (Color Science)' },
-            tint:        { val: 0, min: -1, max: 1, step: 0.05, group: '色彩科学 (Color Science)' },
-            saturation:  { val: 1.0, min: 0, max: 3, step: 0.05, group: '色彩科学 (Color Science)' },
-            hue:         { val: 0, min: -3.14, max: 3.14, step: 0.1, group: '色彩科学 (Color Science)' },
-            // RGB 色调映射 (Lift-Gamma-Gain 代替曲线)
-            shadows:    { val: 0, min: -1, max: 1, step: 0.05, group: '色调映射 (RGB Curves / Tone)' },
-            midtones:   { val: 1, min: 0.1, max: 3, step: 0.05, group: '色调映射 (RGB Curves / Tone)' }, // Gamma 控制
-            highlights: { val: 1, min: 0, max: 2, step: 0.05, group: '色调映射 (RGB Curves / Tone)' },
-            // 赛博实验室 (数字退化)
-            pixelate:   { val: 1, min: 1, max: 64, step: 1, group: '数字退化 (Cyber Patina Lab)' },
-            aberration: { val: 0, min: 0, max: 0.05, step: 0.001, group: '数字退化 (Cyber Patina Lab)' },
-            posterize:  { val: 256, min: 2, max: 256, step: 1, group: '数字退化 (Cyber Patina Lab)' },
-            vignette:   { val: 0, min: 0, max: 1.5, step: 0.05, group: '数字退化 (Cyber Patina Lab)' },
-            scanline:   { val: 0, min: 0, max: 1, step: 0.05, group: '动态故障 (Dynamic Glitch)' },
-            glitch:     { val: 0, min: 0, max: 1, step: 0.05, group: '动态故障 (Dynamic Glitch)' },
-            // ✨ 新增第 6 组：镜头与胶片
-            distortion: { val: 0, min: 0, max: 1, step: 0.05, group: '镜头与胶片 (Lens & Film)' },
-            grain:      { val: 0, min: 0, max: 1, step: 0.05, group: '镜头与胶片 (Lens & Film)' }
+            exposure: { val: 0, default: 0, min: -3, max: 3, step: 0.1, tab: 'tab1', group: '光影与结构' },
+            contrast: { val: 1.0, default: 1.0, min: 0.1, max: 3.0, step: 0.05, tab: 'tab1', group: '光影与结构' },
+            clarity:  { val: 0, default: 0, min: 0, max: 1, step: 0.05, tab: 'tab1', group: '光影与结构' },
+            temperature: { val: 0, default: 0, min: -1, max: 1, step: 0.05, tab: 'tab1', group: '色彩科学' },
+            tint:        { val: 0, default: 0, min: -1, max: 1, step: 0.05, tab: 'tab1', group: '色彩科学' },
+            saturation:  { val: 1.0, default: 1.0, min: 0, max: 3, step: 0.05, tab: 'tab1', group: '色彩科学' },
+            hue:         { val: 0, default: 0, min: -3.14, max: 3.14, step: 0.1, tab: 'tab1', group: '色彩科学' },
+            shadows:    { val: 0, default: 0, min: -1, max: 1, step: 0.05, tab: 'tab1', group: '色调映射' },
+            midtones:   { val: 1, default: 1, min: 0.1, max: 3, step: 0.05, tab: 'tab1', group: '色调映射' },
+            highlights: { val: 1, default: 1, min: 0, max: 2, step: 0.05, tab: 'tab1', group: '色调映射' },
+            split_radius: { val: 2.0, default: 2.0, min: 0.1, max: 15.0, step: 0.1, tab: 'tab2', group: '① 频域切割' },
+            high_detail:  { val: 1.0, default: 1.0, min: 0.0, max: 4.0, step: 0.05, tab: 'tab2', group: '① 频域切割' },
+            high_offset:  { val: 0.0, default: 0.0, min: -30.0, max: 30.0, step: 0.5, tab: 'tab2', group: '② 高频雕刻' },
+            high_invert:  { val: 0.0, default: 0.0, min: 0.0, max: 1.0, step: 1.0, tab: 'tab2', group: '② 高频雕刻' }, 
+            low_hue:      { val: 0.0, default: 0.0, min: -3.14, max: 3.14, step: 0.05, tab: 'tab2', group: '③ 低频氛围' },
+            halation:     { val: 0.0, default: 0.0, min: 0.0, max: 2.0, step: 0.05, tab: 'tab2', group: '③ 低频氛围' },
+            freq_mask:    { val: 0.0, default: 0.0, min: 0.0, max: 1.0, step: 0.05, tab: 'tab2', group: '④ 跨频调制' },
+            pixelate:   { val: 1, default: 1, min: 1, max: 64, step: 1, tab: 'tab3', group: '数字退化' },
+            aberration: { val: 0, default: 0, min: 0, max: 0.05, step: 0.001, tab: 'tab3', group: '数字退化' },
+            posterize:  { val: 256, default: 256, min: 2, max: 256, step: 1, tab: 'tab3', group: '数字退化' },
+            vignette:   { val: 0, default: 0, min: 0, max: 1.5, step: 0.05, tab: 'tab3', group: '数字退化' },
+            scanline:   { val: 0, default: 0, min: 0, max: 1, step: 0.05, tab: 'tab3', group: '动态故障' },
+            glitch:     { val: 0, default: 0, min: 0, max: 1, step: 0.05, tab: 'tab3', group: '动态故障' },
+            distortion: { val: 0, default: 0, min: 0, max: 1, step: 0.05, tab: 'tab3', group: '镜头与胶片' },
+            grain:      { val: 0, default: 0, min: 0, max: 1, step: 0.05, tab: 'tab3', group: '镜头与胶片' }
         };
 
-        // ==========================================
-        // 2. 动态生成控制面板 UI
-        // ==========================================
-        const container = document.getElementById('ui-container');
-        const groups = [...new Set(Object.values(state).map(s => s.group))];
-        
-        groups.forEach((groupName, index) => {
-            const details = document.createElement('details');
-            if (index === 0) details.open = true;
-            details.innerHTML = `<summary>📂 ${groupName}</summary><div class="group" id="group-${index}"></div>`;
-            container.appendChild(details);
+        function setParam(key, value) {
+            if (state[key]) {
+                state[key].val = parseFloat(value);
+                const slider = document.getElementById(key); const valDisplay = document.getElementById(`val-${key}`);
+                if (slider) slider.value = state[key].val; if (valDisplay) valDisplay.innerText = state[key].val.toFixed(2);
+            }
+        }
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            Object.keys(state).forEach(key => setParam(key, state[key].default));
+            document.getElementById('xy-cursor').style.left = '50%'; 
+            document.getElementById('xy-cursor').style.top = '50%';
             
-            const groupDiv = document.getElementById(`group-${index}`);
-            Object.keys(state).forEach(key => {
-                if (state[key].group === groupName) {
-                    const id = key;
-                    const s = state[key];
-                    groupDiv.innerHTML += `
-                        <div class="row">
-                            <div class="label-row"><span>${id.toUpperCase()}</span><span id="val-${id}">${s.val}</span></div>
-                            <input type="range" id="${id}" min="${s.min}" max="${s.max}" step="${s.step}" value="${s.val}">
-                        </div>
-                    `;
-                }
+            gravity.x = 0; gravity.y = 0; gravity.targetX = 0; gravity.targetY = 0;
+            document.getElementById('glcanvas').style.transform = `scale(1.0) rotateX(0deg) rotateY(0deg)`;
+            
+            kinetic.glitch = 0; kinetic.aberration = 0; kinetic.high_invert = 0;
+            audioSys.bass = 0; audioSys.treble = 0;
+        });
+
+        const presets = {
+            nightCity: { contrast: 1.3, temperature: -0.3, tint: 0.2, saturation: 1.5, shadows: -0.2, halation: 0.8, aberration: 0.015, scanline: 0.2, vignette: 0.8 },
+            lucidDream: { exposure: 0.2, contrast: 0.9, clarity: 0.3, saturation: 1.2, hue: 1.5, high_detail: 0.5, halation: 1.5, freq_mask: 0.8, grain: 0.4 },
+            systemError: { contrast: 1.5, high_invert: 1.0, low_hue: 2.0, pixelate: 6, aberration: 0.04, posterize: 8, scanline: 0.8, glitch: 0.6 },
+            xRay: { exposure: -1.0, contrast: 2.0, saturation: 0, high_detail: 2.5, high_invert: 1.0, split_radius: 5.0, vignette: 1.2 }
+        };
+        window.applyPreset = function(name) { 
+            document.getElementById('reset-btn').click(); 
+            for (let k in presets[name]) setParam(k, presets[name][k]); 
+        };
+        
+        document.getElementById('rand-btn').addEventListener('click', () => {
+            ['contrast', 'temperature', 'hue', 'halation', 'aberration', 'scanline', 'glitch', 'high_invert', 'low_hue'].forEach(k => {
+                let r = state[k].min + Math.random() * (state[k].max - state[k].min);
+                if(k==='aberration') r*=0.5; if(k==='high_invert') r=Math.random()>0.8?1.0:0.0; setParam(k, r);
             });
         });
 
-        // ==========================================
-        // 3. WebGL 渲染引擎 (GPU 加速核心)
-        // ==========================================
-        const canvas = document.getElementById('glcanvas');
-        const gl = canvas.getContext('webgl');
+        const tabBtns = document.querySelectorAll('.tab-btn'); const tabContents = document.querySelectorAll('.tab-content');
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                tabBtns.forEach(b => b.classList.remove('active')); tabContents.forEach(c => c.classList.remove('active'));
+                btn.classList.add('active'); document.getElementById(btn.getAttribute('data-target')).classList.add('active');
+                btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            });
+        });
+        ['tab1', 'tab2', 'tab3'].forEach(tabId => {
+            const container = document.getElementById(tabId); const keys = Object.keys(state).filter(k => state[k].tab === tabId);
+            [...new Set(keys.map(k => state[k].group))].forEach((gName, i) => {
+                const details = document.createElement('details'); details.open = true; const safeId = `${tabId}-g-${i}`;
+                details.innerHTML = `<summary>📂 ${gName}</summary><div class="group" id="${safeId}"></div>`; container.appendChild(details);
+                keys.forEach(k => { if (state[k].group === gName) document.getElementById(safeId).innerHTML += `<div class="row"><div class="label-row"><span>${k.toUpperCase()}</span><span id="val-${k}">${state[k].val}</span></div><input type="range" id="${k}" min="${state[k].min}" max="${state[k].max}" step="${state[k].step}" value="${state[k].val}"></div>`; });
+            });
+        });
+        Object.keys(state).forEach(k => { const s = document.getElementById(k); if(s) s.addEventListener('input', e => setParam(k, e.target.value)); });
 
-        // 顶点着色器 (仅负责铺满屏幕)
-        const vsSource = `
-            attribute vec2 a_position;
-            varying vec2 v_uv;
-            void main() {
-                v_uv = a_position * 0.5 + 0.5;
-                v_uv.y = 1.0 - v_uv.y; // 翻转 Y 轴匹配图像坐标系
-                gl_Position = vec4(a_position, 0.0, 1.0);
+        const xyPad = document.getElementById('xy-pad'); const xyCursor = document.getElementById('xy-cursor'); let isDragXY = false;
+        function updateXY(e) {
+            const rect = xyPad.getBoundingClientRect(); let x = e.clientX || (e.touches && e.touches[0].clientX); let y = e.clientY || (e.touches && e.touches[0].clientY);
+            x = Math.max(0, Math.min(x - rect.left, rect.width)); y = Math.max(0, Math.min(y - rect.top, rect.height));
+            xyCursor.style.left = `${(x/rect.width)*100}%`; xyCursor.style.top = `${(y/rect.height)*100}%`;
+            setParam('hue', -3.14 + ((x/rect.width) * 6.28)); setParam('saturation', 1.0 + ((x/rect.width) * 1.5));
+            setParam('glitch', y/rect.height); setParam('aberration', (y/rect.height) * 0.05); setParam('scanline', (y/rect.height) * 0.5);
+        }
+        xyPad.addEventListener('mousedown', e => { isDragXY=true; updateXY(e); }); document.addEventListener('mousemove', e => { if(isDragXY) updateXY(e); }); document.addEventListener('mouseup', () => isDragXY=false);
+        xyPad.addEventListener('touchstart', e => { isDragXY=true; updateXY(e); }, {passive: false}); document.addEventListener('touchmove', e => { if(isDragXY){updateXY(e); e.preventDefault();} }, {passive: false}); document.addEventListener('touchend', () => isDragXY=false);
+
+
+        // ================= 动态引擎模块 =================
+        const kinetic = { active: true, sens: 2.0, decay: 0.92, glitch: 0, aberration: 0, high_invert: 0 };
+        document.getElementById('kinetic-toggle').addEventListener('click', e => {
+            kinetic.active = !kinetic.active;
+            e.target.innerText = kinetic.active ? "🟢 动能引擎：已激活" : "⭕ 动能引擎：未激活";
+            e.target.className = kinetic.active ? "ai-btn status-active" : "ai-btn";
+        });
+        document.getElementById('kinetic-sens').addEventListener('input', e => { kinetic.sens = parseFloat(e.target.value); document.getElementById('val-kinetic-sens').innerText = kinetic.sens.toFixed(1); });
+        document.getElementById('kinetic-decay').addEventListener('input', e => { kinetic.decay = parseFloat(e.target.value); document.getElementById('val-kinetic-decay').innerText = kinetic.decay.toFixed(2); });
+
+        const canvas = document.getElementById('glcanvas');
+        let kLastX = 0, kLastY = 0, kLastTime = 0;
+        canvas.addEventListener('pointerdown', e => { kLastX = e.clientX; kLastY = e.clientY; kLastTime = performance.now(); });
+        canvas.addEventListener('pointermove', e => {
+            if (!kinetic.active) return;
+            if (e.pointerType === 'mouse' && e.buttons !== 1) { kLastTime = 0; return; }
+            const now = performance.now();
+            if (kLastTime > 0) {
+                const dt = now - kLastTime;
+                if (dt > 0 && dt < 100) {
+                    const dist = Math.sqrt(Math.pow(e.clientX - kLastX, 2) + Math.pow(e.clientY - kLastY, 2));
+                    const baseMultiplier = e.pointerType === 'mouse' ? 3.0 : 1.0; 
+                    const impact = (dist / dt) * baseMultiplier * kinetic.sens * 0.1;
+                    if (impact > 0.02) {
+                        kinetic.glitch = Math.min(kinetic.glitch + impact, 1.5);
+                        kinetic.aberration = Math.min(kinetic.aberration + impact * 0.05, 0.2);
+                        if (impact > 0.8) kinetic.high_invert = 1.0;
+                    }
+                }
             }
+            kLastX = e.clientX; kLastY = e.clientY; kLastTime = now;
+        });
+        window.addEventListener('pointerup', () => kLastTime = 0);
+
+        const gravity = { active: false, str: 1.5, x: 0, y: 0, targetX: 0, targetY: 0 };
+        document.getElementById('gravity-toggle').addEventListener('click', async e => {
+            if (!gravity.active && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try { const p = await DeviceOrientationEvent.requestPermission(); if(p !== 'granted') alert('需允许陀螺仪权限'); } catch(err) { console.warn(err); }
+            }
+            gravity.active = !gravity.active;
+            e.target.innerText = gravity.active ? "🟢 重力透镜：已激活" : "⭕ 重力透镜：未激活";
+            e.target.className = gravity.active ? "ai-btn status-active" : "ai-btn";
+            if(!gravity.active){ 
+                gravity.x = 0; gravity.y = 0; gravity.targetX = 0; gravity.targetY = 0; 
+                canvas.style.transform = `scale(1.0) rotateX(0deg) rotateY(0deg)`;
+            }
+        });
+        document.getElementById('gravity-str').addEventListener('input', e => { gravity.str = parseFloat(e.target.value); document.getElementById('val-gravity-str').innerText = gravity.str.toFixed(1); });
+        
+        window.addEventListener('deviceorientation', e => {
+            if(!gravity.active) return;
+            let gamma = e.gamma ? Math.max(-45, Math.min(45, e.gamma)) : 0; 
+            let beta = e.beta ? Math.max(-45, Math.min(45, e.beta - 45)) : 0; 
+            gravity.targetX = (gamma / 45) * gravity.str;
+            gravity.targetY = (beta / 45) * gravity.str;
+        });
+        
+        document.addEventListener('mousemove', e => {
+            if(!gravity.active) return;
+            const cx = window.innerWidth / 2;
+            const cy = window.innerHeight / 2;
+            gravity.targetX = ((e.clientX - cx) / cx) * gravity.str;
+            gravity.targetY = ((e.clientY - cy) / cy) * gravity.str;
+        });
+
+        const audioSys = { active: false, ctx: null, analyser: null, data: null, gain: 1.5, bass: 0, treble: 0 };
+        document.getElementById('audio-toggle').addEventListener('click', async e => {
+            if (!audioSys.active) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    audioSys.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    audioSys.analyser = audioSys.ctx.createAnalyser(); audioSys.analyser.fftSize = 256;
+                    audioSys.data = new Uint8Array(audioSys.analyser.frequencyBinCount);
+                    const source = audioSys.ctx.createMediaStreamSource(stream); source.connect(audioSys.analyser);
+                    audioSys.active = true; e.target.innerText = "🎛️ 频段共振：已链接"; e.target.className = "ai-btn status-active-audio";
+                } catch (err) { alert('麦克风接入失败。'); }
+            } else {
+                audioSys.active = false; if(audioSys.ctx) audioSys.ctx.close();
+                e.target.innerText = "🎙️ 激活麦克风阵列"; e.target.className = "ai-btn";
+            }
+        });
+        document.getElementById('audio-gain').addEventListener('input', e => { audioSys.gain = parseFloat(e.target.value); document.getElementById('val-audio-gain').innerText = audioSys.gain.toFixed(1); });
+
+        // ================= WebGL 着色器与引擎 =================
+        const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true });
+
+        const vsSource = `
+            attribute vec2 a_position; varying vec2 v_uv;
+            void main() { v_uv = a_position * 0.5 + 0.5; v_uv.y = 1.0 - v_uv.y; gl_Position = vec4(a_position, 0.0, 1.0); }
         `;
 
-        // 片段着色器 (The Hardcore Math)
         const fsSource = `
             precision highp float;
             varying vec2 v_uv;
-            uniform sampler2D u_image;
-            uniform vec2 u_resolution;
-            uniform float u_time;
+            uniform sampler2D u_image; uniform vec2 u_resolution; uniform float u_time; uniform float u_flip_x; 
+            
+            // LUT 专属 uniform
+            uniform sampler2D u_lut;
+            uniform float u_has_lut;
+            uniform float u_lut_size;
 
-            // 新增：前摄翻转控制
-            uniform float u_flip_x; 
-
-            // 映射 Uniforms
             uniform float u_exposure; uniform float u_contrast; uniform float u_clarity;
             uniform float u_temperature; uniform float u_tint; uniform float u_saturation; uniform float u_hue;
             uniform float u_shadows; uniform float u_midtones; uniform float u_highlights;
             uniform float u_pixelate; uniform float u_aberration; uniform float u_posterize; uniform float u_vignette;
-            uniform float u_scanline; uniform float u_glitch;
-            
-            // 新增第 6 组参数：镜头与胶片
-            uniform float u_distortion; uniform float u_grain;
+            uniform float u_scanline; uniform float u_glitch; uniform float u_distortion; uniform float u_grain;
+            uniform float u_split_radius; uniform float u_high_detail; uniform float u_high_offset;
+            uniform float u_high_invert; uniform float u_low_hue; uniform float u_halation; uniform float u_freq_mask;
+            uniform vec2 u_gravity; 
 
-            // RGB <-> HSV 函数
+            // ACES 电影级色调映射曲线
+            vec3 ACESFilm(vec3 x) {
+                float a = 2.51; float b = 0.03; float c = 2.43; float d = 0.59; float e = 0.14;
+                return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+            }
+
             vec3 rgb2hsv(vec3 c) { vec4 K=vec4(0.0,-1.0/3.0,2.0/3.0,-1.0); vec4 p=mix(vec4(c.bg,K.wz),vec4(c.gb,K.xy),step(c.b,c.g)); vec4 q=mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r)); float d=q.x-min(q.w,q.y); float e=1.0e-10; return vec3(abs(q.z+(q.w-q.y)/(6.0*d+e)),d/(q.x+e),q.x); }
             vec3 hsv2rgb(vec3 c) { vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0); vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.www); return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y); }
-            
-            // 简单的伪随机噪声发生器
             float rand(vec2 co){ return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453); }
+
+            // WebGL 1.0 兼容版 3D LUT 采样器
+            vec3 applyLUT(vec3 color, sampler2D lut, float size) {
+                color = clamp(color, 0.0, 1.0);
+                float b = color.b * (size - 1.0);
+                vec2 quad1 = vec2(floor(b), 0.0);
+                vec2 quad2 = vec2(ceil(b), 0.0);
+                vec2 texSize = vec2(size * size, size);
+                vec2 offset = vec2(0.5) / texSize; 
+                vec2 uv1 = (quad1 * size + color.rg * (size - 1.0)) / texSize + offset;
+                vec2 uv2 = (quad2 * size + color.rg * (size - 1.0)) / texSize + offset;
+                vec3 col1 = texture2D(lut, uv1).rgb;
+                vec3 col2 = texture2D(lut, uv2).rgb;
+                return mix(col1, col2, fract(b));
+            }
 
             void main() {
                 vec2 uv = v_uv;
-                
-                // 1. 前摄镜像翻转
-                if (u_flip_x > 0.5) {
-                    uv.x = 1.0 - uv.x;
-                }
+                if (u_flip_x > 0.5) uv.x = 1.0 - uv.x;
 
-                // 2. CRT 桶形球面畸变
-                if (u_distortion > 0.0) {
-                    vec2 cc = uv - 0.5; // 将原点移到中心
-                    float dist = dot(cc, cc);
-                    uv = uv + cc * (dist * u_distortion);
-                }
-
-                // 3. 空间退化：电子包浆 (马赛克像素化)
-                if (u_pixelate > 1.0) {
-                    float dx = u_pixelate / u_resolution.x;
-                    float dy = u_pixelate / u_resolution.y;
-                    uv = vec2(dx * floor(uv.x / dx), dy * floor(uv.y / dy));
-                }
+                if (u_distortion > 0.0) { vec2 cc = uv - 0.5; float dist = dot(cc, cc); uv = uv + cc * (dist * u_distortion); }
+                if (u_pixelate > 1.0) { float dx = u_pixelate / u_resolution.x; float dy = u_pixelate / u_resolution.y; uv = vec2(dx * floor(uv.x / dx), dy * floor(uv.y / dy)); }
 
                 vec4 color = texture2D(u_image, uv);
+                vec2 step = u_split_radius / u_resolution;
                 
-                // 4. 动态通道剥离：色散 + Glitch 抖动
-                if (u_aberration > 0.0 || u_glitch > 0.0) {
-                    float noise = rand(vec2(uv.y, u_time)) * 2.0 - 1.0; 
-                    float offset = u_aberration + (u_glitch * noise * 0.08); 
-                    color.r = texture2D(u_image, uv + vec2(offset, 0.0)).r;
-                    color.b = texture2D(u_image, uv - vec2(offset, 0.0)).b;
+                // 频段分离计算
+                vec3 lowFreq = vec3(0.0);
+                lowFreq += texture2D(u_image, uv).rgb * 0.2042; lowFreq += texture2D(u_image, uv + vec2(step.x, 0.0)).rgb * 0.1238; lowFreq += texture2D(u_image, uv + vec2(-step.x, 0.0)).rgb * 0.1238; lowFreq += texture2D(u_image, uv + vec2(0.0, step.y)).rgb * 0.1238; lowFreq += texture2D(u_image, uv + vec2(0.0, -step.y)).rgb * 0.1238; lowFreq += texture2D(u_image, uv + vec2(step.x, step.y)).rgb * 0.0751; lowFreq += texture2D(u_image, uv + vec2(-step.x, step.y)).rgb * 0.0751; lowFreq += texture2D(u_image, uv + vec2(step.x, -step.y)).rgb * 0.0751; lowFreq += texture2D(u_image, uv + vec2(-step.x, -step.y)).rgb * 0.0751;
+
+                vec3 highFreq = vec3(0.0);
+                if (u_high_offset != 0.0) {
+                    vec2 oUV = uv + vec2(u_high_offset / u_resolution.x, -u_high_offset / u_resolution.y);
+                    vec3 oLow = vec3(0.0); oLow += texture2D(u_image, oUV).rgb * 0.2042; oLow += texture2D(u_image, oUV + vec2(step.x, 0.0)).rgb * 0.1238; oLow += texture2D(u_image, oUV + vec2(-step.x, 0.0)).rgb * 0.1238; oLow += texture2D(u_image, oUV + vec2(0.0, step.y)).rgb * 0.1238; oLow += texture2D(u_image, oUV + vec2(0.0, -step.y)).rgb * 0.1238; oLow += texture2D(u_image, oUV + vec2(step.x, step.y)).rgb * 0.0751; oLow += texture2D(u_image, oUV + vec2(-step.x, step.y)).rgb * 0.0751; oLow += texture2D(u_image, oUV + vec2(step.x, -step.y)).rgb * 0.0751; oLow += texture2D(u_image, oUV + vec2(-step.x, -step.y)).rgb * 0.0751;
+                    highFreq = texture2D(u_image, oUV).rgb - oLow;
+                } else { highFreq = color.rgb - lowFreq; }
+
+                highFreq *= u_high_detail;
+                if (u_high_invert > 0.5) { highFreq = abs(highFreq) * 2.5; }
+                if (u_freq_mask > 0.0) { float luma = dot(lowFreq, vec3(0.299, 0.587, 0.114)); float mask = smoothstep(0.2, 0.7, luma); highFreq *= mix(1.0, mask, u_freq_mask); }
+
+                if (u_low_hue != 0.0) { vec3 hsvLF = rgb2hsv(lowFreq); hsvLF.x = mod(hsvLF.x + u_low_hue / 6.28318, 1.0); lowFreq = hsv2rgb(hsvLF); }
+                if (u_halation > 0.0) { float luma = dot(lowFreq, vec3(0.299, 0.587, 0.114)); lowFreq += lowFreq * smoothstep(0.5, 1.0, luma) * u_halation; }
+
+                color.rgb = lowFreq + highFreq;
+                
+                // 像素色散与扭曲
+                float noise = rand(vec2(uv.y, u_time)) * 2.0 - 1.0; 
+                float baseOffset = u_aberration + (u_glitch * noise * 0.08); 
+                vec2 totalOffsetR = vec2(baseOffset, 0.0) + (u_gravity * 0.08); 
+                vec2 totalOffsetB = vec2(-baseOffset, 0.0) - (u_gravity * 0.08);
+
+                if (length(u_gravity) > 0.0 || u_glitch > 0.0 || u_aberration > 0.0) {
+                    color.r = texture2D(u_image, clamp(uv + totalOffsetR, 0.0, 1.0)).r;
+                    color.b = texture2D(u_image, clamp(uv + totalOffsetB, 0.0, 1.0)).b;
                 }
 
-                // 5. 结构锐化 (Clarity)
                 if (u_clarity > 0.0) {
-                    vec2 step = 1.0 / u_resolution;
-                    vec3 col_up = texture2D(u_image, uv + vec2(0.0, step.y)).rgb;
-                    vec3 col_dn = texture2D(u_image, uv + vec2(0.0, -step.y)).rgb;
-                    vec3 col_lf = texture2D(u_image, uv + vec2(-step.x, 0.0)).rgb;
-                    vec3 col_rt = texture2D(u_image, uv + vec2(step.x, 0.0)).rgb;
-                    vec3 highFreq = color.rgb * 4.0 - (col_up + col_dn + col_lf + col_rt);
-                    color.rgb += highFreq * u_clarity * 2.5; 
+                    vec2 stepC = 1.0 / u_resolution; vec3 col_up = texture2D(u_image, uv + vec2(0.0, stepC.y)).rgb; vec3 col_dn = texture2D(u_image, uv + vec2(0.0, -stepC.y)).rgb; vec3 col_lf = texture2D(u_image, uv + vec2(-stepC.x, 0.0)).rgb; vec3 col_rt = texture2D(u_image, uv + vec2(stepC.x, 0.0)).rgb;
+                    vec3 highFreqClarity = color.rgb * 4.0 - (col_up + col_dn + col_lf + col_rt); color.rgb += highFreqClarity * u_clarity * 2.5; 
                 }
                 
-                // 6. 基础光影与色彩科学
-                color.rgb *= pow(2.0, u_exposure);
+                // --- 色彩与光度学管线 ---
+                
+                // 1. 光影塑形 (HDR 空间)
+                color.rgb *= pow(2.0, u_exposure); 
                 color.rgb = (color.rgb - 0.5) * u_contrast + 0.5;
-                color.r += u_temperature * 0.2; color.b -= u_temperature * 0.2; 
+                
+                // 2. 基础色偏
+                color.r += u_temperature * 0.2; 
+                color.b -= u_temperature * 0.2; 
                 color.g += u_tint * 0.2; 
-
-                vec3 hsv = rgb2hsv(color.rgb);
+                
+                vec3 safeColor = max(color.rgb, vec3(0.0)); 
+                vec3 hsv = rgb2hsv(safeColor); 
                 hsv.y *= u_saturation; 
                 hsv.x = mod(hsv.x + u_hue / 6.28318, 1.0); 
                 color.rgb = hsv2rgb(hsv);
 
-                // 7. 色调映射
+                // 3. ACES 色调映射 (HDR 压制回 0.0-1.0)
+                color.rgb = ACESFilm(color.rgb);
+
+                // 4. 应用 3D LUT
+                if (u_has_lut > 0.5) {
+                    color.rgb = applyLUT(color.rgb, u_lut, u_lut_size);
+                }
+
+                // 5. LDR 艺术微调
                 color.rgb = color.rgb * u_highlights; 
                 color.rgb = pow(clamp(color.rgb, 0.0, 1.0), vec3(1.0 / u_midtones)); 
                 color.rgb = color.rgb + u_shadows * (1.0 - color.rgb); 
-
-                // 8. 色阶分离 (Posterize)
+                
+                // --- 终末滤镜 ---
                 if (u_posterize < 256.0) { color.rgb = floor(color.rgb * u_posterize) / u_posterize; }
+                if (u_scanline > 0.0) { float scan = sin(uv.y * 800.0 - u_time * 10.0) * 0.04 * u_scanline; color.rgb -= scan; }
 
-                // 9. 动态扫描线 (CRT Scanlines)
-                if (u_scanline > 0.0) {
-                    float scan = sin(uv.y * 800.0 - u_time * 10.0) * 0.04 * u_scanline;
-                    color.rgb -= scan;
-                }
+                float dist = distance(v_uv, vec2(0.5, 0.5)); color.rgb *= smoothstep(0.8, 0.8 - u_vignette, dist);
+                if (u_grain > 0.0) { float gNoise = rand(uv + mod(u_time, 10.0)); color.rgb -= (gNoise - 0.5) * u_grain * 0.3; }
 
-                // 10. 暗角 (Vignette)
-                float dist = distance(v_uv, vec2(0.5, 0.5));
-                color.rgb *= smoothstep(0.8, 0.8 - u_vignette, dist);
-
-                // 11. 动态胶片颗粒 (Film Grain)
-                if (u_grain > 0.0) {
-                    float gNoise = rand(uv + mod(u_time, 10.0)); // 加入时间参数让噪点动起来
-                    color.rgb -= (gNoise - 0.5) * u_grain * 0.3; 
-                }
-
-                // 最终输出边界裁切
                 gl_FragColor = vec4(clamp(color.rgb, 0.0, 1.0), 1.0);
             }
         `;
 
-        // 编译着色器工具
         function createShader(gl, type, source) {
-            const shader = gl.createShader(type);
-            gl.shaderSource(shader, source);
-            gl.compileShader(shader);
-            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                console.error('Shader error:', gl.getShaderInfoLog(shader));
-                gl.deleteShader(shader);
-                return null;
-            }
-            return shader;
+            const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) return null; return shader;
         }
 
-        const program = gl.createProgram();
-        gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, vsSource));
-        gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, fsSource));
-        gl.linkProgram(program);
-        gl.useProgram(program);
+        const program = gl.createProgram(); gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, vsSource)); gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, fsSource)); gl.linkProgram(program); gl.useProgram(program);
+        const positionBuffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+        const positionLocation = gl.getAttribLocation(program, 'a_position'); gl.enableVertexAttribArray(positionLocation); gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-        // 设置全屏矩形几何体
-        const positionBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
-        const positionLocation = gl.getAttribLocation(program, 'a_position');
-        gl.enableVertexAttribArray(positionLocation);
-        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+        const texture = gl.createTexture(); 
+        
+        // ================= LUT 核心引擎 =================
+        let lutTexture = gl.createTexture();
+        let hasLut = 0.0;
+        let lutSize = 32.0; 
 
-        // 创建纹理容器
-        const texture = gl.createTexture();
-        let sourceImage = new Image();
+        // 初始化一个空的 1x1 纹理防报错
+        gl.bindTexture(gl.TEXTURE_2D, lutTexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0,0,0,255]));
 
-        // 绑定 UI 事件
-        Object.keys(state).forEach(key => {
-            const slider = document.getElementById(key);
-            const valDisplay = document.getElementById(`val-${key}`);
-            slider.addEventListener('input', (e) => {
-                state[key].val = parseFloat(e.target.value);
-                valDisplay.innerText = state[key].val;
-                requestAnimationFrame(render); // 零延迟触发重绘
-            });
+        document.getElementById('upload-lut').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const text = event.target.result;
+                const lines = text.split('\n');
+                let size = 0;
+                let data = [];
+
+                for (let i = 0; i < lines.length; i++) {
+                    let line = lines[i].trim();
+                    if (line.startsWith('LUT_3D_SIZE')) {
+                        size = parseInt(line.split(/\s+/)[1]);
+                    } else if (/^[\d.-]+\s+[\d.-]+\s+[\d.-]+/.test(line)) {
+                        let [r, g, b] = line.split(/\s+/).map(Number);
+                        data.push(r * 255, g * 255, b * 255, 255); 
+                    }
+                }
+
+                if (size === 0 || data.length === 0) {
+                    alert("⚠️ 无法解析该 .cube 文件！"); return;
+                }
+
+                lutSize = size;
+                const uint8Data = new Uint8Array(data);
+
+                // 空间折叠绑定
+                gl.bindTexture(gl.TEXTURE_2D, lutTexture);
+                gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); 
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size * size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, uint8Data);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+                hasLut = 1.0;
+                document.getElementById('clear-lut-btn').style.display = 'inline-block';
+                console.log(`[Cyber Patina] 3D LUT 挂载成功: ${size}^3 节点`);
+            };
+            reader.readAsText(file);
         });
 
-        // 核心渲染循环 (将 CPU 状态向量传入 GPU 着色器)
-        // ==========================================
-        // 核心渲染循环系统
-        // ==========================================
-        let startTime = Date.now();
-        let videoElement = null; // 用于存放摄像头流
-        // 在 let startTime = Date.now(); 和 let videoElement = null; 附近添加：
-        let isUsingCamera = false;
-        let currentFacingMode = 'environment'; // 默认使用后置摄像头
-        // 修改 render 函数
+        document.getElementById('clear-lut-btn').addEventListener('click', (e) => {
+            hasLut = 0.0; e.target.style.display = 'none';
+        });
+
+        let sourceImage = new Image();
+        let startTime = Date.now(); let videoElement = null; let isUsingCamera = false; let currentFacingMode = 'environment';
+
         function render() {
-            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-            gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), gl.canvas.width, gl.canvas.height);
+            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height); 
             
-            let currentTime = (Date.now() - startTime) / 1000.0;
-            gl.uniform1f(gl.getUniformLocation(program, 'u_time'), currentTime);
+            // 绑定多纹理通道
+            const imageLoc = gl.getUniformLocation(program, "u_image");
+            const lutLoc = gl.getUniformLocation(program, "u_lut");
+            gl.uniform1i(imageLoc, 0); 
+            gl.uniform1i(lutLoc, 1);   
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, lutTexture);
             
-            // ✨ 判断是否开启了相机且正在使用前摄 (user)，传 1.0 进去触发翻转
-            let flipX = (isUsingCamera && currentFacingMode === 'user') ? 1.0 : 0.0;
-            gl.uniform1f(gl.getUniformLocation(program, 'u_flip_x'), flipX);
+            // 传入状态参数
+            gl.uniform1f(gl.getUniformLocation(program, 'u_has_lut'), hasLut);
+            gl.uniform1f(gl.getUniformLocation(program, 'u_lut_size'), lutSize);
+            gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), gl.canvas.width, gl.canvas.height); 
+            gl.uniform1f(gl.getUniformLocation(program, 'u_time'), (Date.now() - startTime) / 1000.0); 
+            gl.uniform1f(gl.getUniformLocation(program, 'u_flip_x'), (isUsingCamera && currentFacingMode === 'user') ? 1.0 : 0.0);
 
             if (isUsingCamera && videoElement && videoElement.readyState >= videoElement.HAVE_CURRENT_DATA) {
-                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, texture); 
                 gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoElement);
             }
 
+            if (gravity.active) {
+                gravity.x += (gravity.targetX - gravity.x) * 0.1;
+                gravity.y += (gravity.targetY - gravity.y) * 0.1;
+                canvas.style.transform = `scale(1.05) rotateX(${-gravity.y * 20}deg) rotateY(${gravity.x * 20}deg)`; 
+            }
+            gl.uniform2f(gl.getUniformLocation(program, 'u_gravity'), gravity.x, gravity.y);
+
+            if (kinetic.active) { kinetic.glitch *= kinetic.decay; kinetic.aberration *= kinetic.decay; kinetic.high_invert *= 0.85; }
+
+            if (audioSys.active && audioSys.analyser) {
+                audioSys.analyser.getByteFrequencyData(audioSys.data); let bSum = 0, tSum = 0;
+                for(let i=0; i<10; i++) bSum += audioSys.data[i]; for(let i=50; i<100; i++) tSum += audioSys.data[i];
+                audioSys.bass += ((bSum / 10 / 255) - audioSys.bass) * 0.2; audioSys.treble += ((tSum / 50 / 255) - audioSys.treble) * 0.3;
+            }
+
             Object.keys(state).forEach(key => {
-                gl.uniform1f(gl.getUniformLocation(program, `u_${key}`), state[key].val);
+                let finalVal = state[key].val;
+                if (kinetic.active) { if (key === 'glitch') finalVal += kinetic.glitch; if (key === 'aberration') finalVal += kinetic.aberration; if (key === 'high_invert') finalVal = Math.max(finalVal, kinetic.high_invert > 0.5 ? 1.0 : 0.0); }
+                if (audioSys.active) { let audioImpact = audioSys.gain; if (key === 'exposure') finalVal += (audioSys.bass * 1.5 * audioImpact); if (key === 'aberration') finalVal += (audioSys.bass * 0.05 * audioImpact); if (key === 'scanline') finalVal += (audioSys.treble * 1.5 * audioImpact); if (key === 'glitch') finalVal += (audioSys.treble * 0.8 * audioImpact); }
+                gl.uniform1f(gl.getUniformLocation(program, `u_${key}`), finalVal);
             });
 
-            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-            requestAnimationFrame(render);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); requestAnimationFrame(render);
         }
-        // 修改 slider 监听，去除原有的 requestAnimationFrame(render)
-        Object.keys(state).forEach(key => {
-            const slider = document.getElementById(key);
-            const valDisplay = document.getElementById(`val-${key}`);
-            slider.addEventListener('input', (e) => {
-                state[key].val = parseFloat(e.target.value);
-                valDisplay.innerText = state[key].val;
-            });
-        });
-
-        // 启动渲染循环
         render();
 
-        // ==========================================
-        // 实时摄像头接入逻辑 (支持前后摄切换)
-        // ==========================================
         async function startCamera(facingMode) {
-            if (!videoElement) {
-                videoElement = document.createElement('video');
-                videoElement.autoplay = true;
-                videoElement.muted = true;
-                videoElement.playsInline = true;
-            }
-
-            // 核心：如果当前摄像头正在运行，必须先释放硬件轨道，否则切换会失败或报错
-            if (videoElement.srcObject) {
-                videoElement.srcObject.getTracks().forEach(track => track.stop());
-            }
-
+            if (!videoElement) { videoElement = document.createElement('video'); videoElement.autoplay = true; videoElement.muted = true; videoElement.playsInline = true; }
+            if (videoElement.srcObject) videoElement.srcObject.getTracks().forEach(track => track.stop());
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: facingMode, 
-                        width: { ideal: 1280 }, 
-                        height: { ideal: 720 } 
-                    } 
-                });
-                videoElement.srcObject = stream;
-                videoElement.onloadedmetadata = () => {
-                    videoElement.play();
-                    // 调整 canvas 尺寸匹配视频流
-                    canvas.width = videoElement.videoWidth;
-                    canvas.height = videoElement.videoHeight;
-                };
-                
-                isUsingCamera = true;
-                document.getElementById('flip-cam-btn').style.display = 'inline-block'; // 显示切换按钮
-            } catch (err) {
-                alert('无法访问摄像头，请检查浏览器权限！');
-            }
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } } });
+                videoElement.srcObject = stream; videoElement.onloadedmetadata = () => { videoElement.play(); canvas.width = videoElement.videoWidth; canvas.height = videoElement.videoHeight; };
+                isUsingCamera = true; document.getElementById('flip-cam-btn').style.display = 'inline-block';
+            } catch (err) { alert('无法访问摄像头，请检查权限！'); }
         }
-        document.getElementById('cam-btn').addEventListener('click', () => {
-            startCamera(currentFacingMode);
+        document.getElementById('cam-btn').addEventListener('click', () => startCamera(currentFacingMode));
+        document.getElementById('flip-cam-btn').addEventListener('click', () => { currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment'; startCamera(currentFacingMode); });
+
+        document.getElementById('download-btn').addEventListener('click', () => {
+            if (!sourceImage.src && !isUsingCamera) return;
+            const tCanvas = document.createElement('canvas'); tCanvas.width = canvas.width; tCanvas.height = canvas.height;
+            const tCtx = tCanvas.getContext('2d'); tCtx.drawImage(canvas, 0, 0);
+            const fontSize = Math.max(24, Math.floor(canvas.width * 0.03)); tCtx.font = `italic 800 ${fontSize}px sans-serif`; tCtx.textAlign = 'right';
+            tCtx.fillStyle = 'rgba(255, 0, 85, 0.8)'; tCtx.fillText('CYBER PATINA', canvas.width - 18, canvas.height - 20); tCtx.fillStyle = 'rgba(0, 255, 204, 0.8)'; tCtx.fillText('CYBER PATINA', canvas.width - 22, canvas.height - 20); tCtx.fillStyle = '#ffffff'; tCtx.fillText('CYBER PATINA', canvas.width - 20, canvas.height - 20);
+            tCanvas.toBlob((blob) => { if (!blob) return; const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.style.display = 'none'; a.href = url; a.download = `CyberPatina_${new Date().getTime()}.png`; document.body.appendChild(a); a.click(); setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100); }, 'image/png');
         });
 
-        document.getElementById('flip-cam-btn').addEventListener('click', () => {
-            // 翻转状态并重启相机
-            currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
-            startCamera(currentFacingMode);
-        });
-        // ==========================================
-        // 预设分享与 URL 读取逻辑 (MVP 闭环)
-        // ==========================================
-        // 1. 生成分享链接
-        document.getElementById('share-btn').addEventListener('click', () => {
-            const preset = {};
-            Object.keys(state).forEach(k => preset[k] = state[k].val);
-            // 极简的 Base64 序列化
-            const encoded = btoa(JSON.stringify(preset));
-            const shareUrl = window.location.origin + window.location.pathname + '?p=' + encoded;
-            
-            // 写入剪贴板
-            navigator.clipboard.writeText(shareUrl).then(() => {
-                const btn = document.getElementById('share-btn');
-                btn.innerText = '✅ 已复制';
-                setTimeout(() => btn.innerText = '🔗 复制预设', 2000);
-            });
+        document.getElementById('record-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('record-btn'); if (btn.innerText === "录制中...") return;
+            try {
+                const stream = canvas.captureStream(30); const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' }); const chunks = [];
+                recorder.ondataavailable = e => chunks.push(e.data); recorder.onstop = () => { const blob = new Blob(chunks, { type: 'video/webm' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.style.display = 'none'; a.href = url; a.download = `CyberPatina_${new Date().getTime()}.webm`; document.body.appendChild(a); a.click(); setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100); btn.innerText = "🎥 录制"; btn.style.opacity = "1"; };
+                recorder.start(); btn.innerText = "录制中..."; btn.style.opacity = "0.5"; setTimeout(() => { recorder.stop(); }, 3000);
+            } catch (err) { alert("当前浏览器不支持画布录像功能！"); btn.innerText = "🎥 录制"; }
         });
 
-        // 2. 页面加载时解析 URL 参数
-        window.addEventListener('DOMContentLoaded', () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const p = urlParams.get('p');
-            if (p) {
-                try {
-                    const preset = JSON.parse(atob(p));
-                    Object.keys(preset).forEach(k => {
-                        if(state[k]) {
-                            state[k].val = preset[k];
-                            // 同步更新 UI
-                            const slider = document.getElementById(k);
-                            if(slider) {
-                                slider.value = preset[k];
-                                document.getElementById(`val-${k}`).innerText = preset[k];
-                            }
-                        }
-                    });
-                } catch(e) {
-                    console.error('预设解析失败');
-                }
-            }
+        document.getElementById('upload').addEventListener('change', (e) => {
+            isUsingCamera = false; document.getElementById('flip-cam-btn').style.display = 'none';
+            if (videoElement && videoElement.srcObject) { videoElement.srcObject.getTracks().forEach(track => track.stop()); videoElement.srcObject = null; }
+            const reader = new FileReader(); reader.onload = (event) => initImage(event.target.result); if (e.target.files[0]) reader.readAsDataURL(e.target.files[0]);
         });
 
-        // 加载并初始化测试图案
         function initImage(src) {
             sourceImage.onload = () => {
-                canvas.width = sourceImage.width;
-                canvas.height = sourceImage.height;
-                gl.bindTexture(gl.TEXTURE_2D, texture);
+                canvas.width = sourceImage.width; canvas.height = sourceImage.height; 
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, texture); 
                 gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceImage);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-                render();
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
             };
             sourceImage.src = src;
         }
 
-        // ==========================================
-        // 本地上传图片逻辑 (修复冲突)
-        // ==========================================
-        document.getElementById('upload').addEventListener('change', (e) => {
-            // ✨ 核心修复：上传本地图时，关闭相机状态并释放硬件轨道
-            isUsingCamera = false;
-            document.getElementById('flip-cam-btn').style.display = 'none'; // 隐藏切换按钮
-            
-            if (videoElement && videoElement.srcObject) {
-                videoElement.srcObject.getTracks().forEach(track => track.stop());
-                videoElement.srcObject = null;
-            }
-
-            const reader = new FileReader();
-            reader.onload = (event) => initImage(event.target.result);
-            if (e.target.files[0]) reader.readAsDataURL(e.target.files[0]);
-        });
-
-        // 启动！(使用 Base64 默认生成一张测试信号图)
         const defaultCanvas = document.createElement('canvas');
         defaultCanvas.width = 1024; defaultCanvas.height = 1024;
         const dCtx = defaultCanvas.getContext('2d');
@@ -521,48 +652,7 @@
         dCtx.fillStyle = grd; dCtx.fillRect(0,0,1024,1024);
         dCtx.fillStyle = '#fff'; dCtx.font = 'bold 120px sans-serif';
         dCtx.fillText('CYBER', 300, 450); dCtx.fillText('ENGINE', 280, 600);
-        
         initImage(defaultCanvas.toDataURL());
-        // ==========================================
-        // 4. 高清原图无损导出逻辑
-        // ==========================================
-        document.getElementById('download-btn').addEventListener('click', () => {
-            if (!sourceImage.src) return;
-
-            // 关键点 1：强制触发一次同步重绘。
-            // 因为 WebGL 默认会在每一帧渲染完毕后清空绘制缓冲区 (Drawing Buffer) 以节省内存。
-            // 如果不先 render() 一次，你截取出来的可能是一张全黑的图。
-            render();
-
-            // 关键点 2：使用 toBlob 异步导出大图，防止 toDataURL 产生的超长 Base64 字符串卡死手机浏览器。
-            canvas.toBlob((blob) => {
-                if (!blob) {
-                    alert('导出失败，请重试');
-                    return;
-                }
-                
-                // 创建一个虚拟的下载链接
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                
-                // 生成带时间戳的文件名，默认保存为 PNG 无损格式
-                const timestamp = new Date().getTime();
-                a.download = `Cyber_Patina_${timestamp}.png`; 
-                
-                document.body.appendChild(a);
-                a.click(); // 触发静默下载
-
-                // 释放内存
-                setTimeout(() => {
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                }, 100);
-                
-            }, 'image/png'); // 你也可以改为 'image/jpeg', 0.95 来输出体积更小的 JPG
-        });
-
     </script>
 </body>
 </html>
